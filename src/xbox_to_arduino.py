@@ -54,23 +54,45 @@ def main():
     # third lowest is y -1 or 1, highest is y 0 or otherwise.
 
     while True:
+        # figure out which messages we need to send
+        left_stick = False
+        right_stick = False
+        buttons = False #includes dpad
+        button_codes = 0 #initially just used for 
+
         events = get_gamepad()
         for event in events:
-            #if event.code == "BTN_SOUTH" and event.state == 1:
-            #    usb.write((1).to_bytes())
             match event.code:
                 case "ABS_X":
-                    left_stick_x = convbits16_8(event.state)
+                    left_stick_x = event.state
+                    left_stick = True
                 case "ABS_Y":
-                    left_stick_y = convbits16_8(event.state)
+                    left_stick_y = event.state
+                    left_stick = True
                 case "ABS_RX":
-                    right_stick_x = convbits16_8(event.state)
+                    right_stick_x = event.state
+                    right_stick = True
                 case "ABS_RY":
-                    right_stick_y = convbits16_8(event.state)
+                    right_stick_y = event.state
+                    right_stick = True
                 case "ABS_HAT0X":
                     dpad_x = event.state
+                    buttons = True
                 case "ABS_HAT0Y":
                     dpad_y = event.state
+                    buttons = True
+                case "BTN_NORTH":
+                    button_codes |= 1
+                    buttons = True
+                case "BTN_SOUTH":
+                    button_codes |= 1 << 1
+                    buttons = True
+                case "BTN_WEST":
+                    button_codes |= 1 << 2
+                    buttons = True
+                case "BTN_EAST":
+                    button_codes |= 1 << 3
+                    buttons = True
 
             #if event.code == "ABS_X":
             #    #new_val = int((event.state + 32768) >> 8)
@@ -79,6 +101,35 @@ def main():
             #    usb.write(new_val.to_bytes())
             #if event.code == "ABS_HAT0X":
             #    print(event.state)
+
+        # prepare variables for building message
+        message_codes = 0
+        message: list[bytes] = [b""]
+
+        # build the serial messages
+        if left_stick:
+            message_codes |= 1
+            message.append(convbits16_8(left_stick_x).to_bytes())
+            message.append(convbits16_8(left_stick_y).to_bytes())
+        if right_stick:
+            message_codes |= 1 << 1
+            message.append(convbits16_8(right_stick_x).to_bytes())
+            message.append(convbits16_8(right_stick_y).to_bytes())
+        if buttons:
+            message_codes |= 1 << 2
+            if dpad_x != 0:
+                button_codes |= 1 << 5
+                button_codes |= int(dpad_x == 1) << 4
+            if dpad_y != 0:
+                button_codes |= 1 << 7
+                button_codes |= int(dpad_y == 1) << 6
+            message.append(button_codes.to_bytes())
+
+        # send the message if there is something to send
+        if message_codes > 0:
+            message[0] = message_codes.to_bytes() #plug in all codes we're sending
+            for chunk in message:
+                usb.write(chunk)
 
 
 if __name__ == "__main__":
